@@ -1,0 +1,122 @@
+name: Build Tauri Release
+
+on:
+  push:
+    tags:
+      - "v*"           # triggers on: git tag v1.0.0 && git push origin --tags
+  workflow_dispatch:   # manual trigger from GitHub UI
+
+permissions:
+  contents: write      # Required to create a Release and upload assets
+  packages: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: .exe
+          - platform: macos-latest
+            target: x86_64-apple-darwin
+            artifact: .dmg
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+            artifact: _aarch64.dmg  # Apple Silicon
+          - platform: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            artifact: .AppImage
+
+    runs-on: ${{ matrix.platform }}
+    name: Build (${{ matrix.platform }})
+
+    steps:
+      # ── 1. Checkout ──────────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Node.js ───────────────────────────────────────────────────────────
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: meeting-recorder/package-lock.json
+
+      # ── 3. Rust ──────────────────────────────────────────────────────────────
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./meeting-recorder/src-tauri -> target"
+
+      # ── 4. Linux system deps ─────────────────────────────────────────────────
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-3-dev libwebkit2gtk-4.1-dev \
+            libappindicator3-dev librsvg2-dev patchelf \
+            libssl-dev libayatana-appindicator3-dev
+
+      # ── 5. Install npm deps ──────────────────────────────────────────────────
+      - name: Install npm dependencies
+        working-directory: meeting-recorder
+        run: npm ci
+
+      # ── 6. Write .env for build ──────────────────────────────────────────────
+      # API keys are passed as GitHub Secrets — never committed to the repo.
+      # Users configure their own key in-app (Settings page).
+      - name: Create .env for build
+        working-directory: meeting-recorder
+        shell: bash
+        run: |
+          cat > .env << EOF
+          VITE_APP_VERSION=${{ github.ref_name }}
+          VITE_GROQ_API_KEY=
+          VITE_MODEL_SUMMARY=llama-3.3-70b-versatile
+          VITE_MODEL_DIARIZATION=llama-3.1-8b-instant
+          VITE_MODEL_EMAIL=llama-3.3-70b-versatile
+          VITE_MODEL_PRIORITIZER=llama-3.1-8b-instant
+          VITE_MODEL_HEALTH=llama-3.1-8b-instant
+          VITE_WHISPER_MODEL=base.en
+          VITE_WATERMARK_VISIBLE=true
+          VITE_ENABLE_AUDIT_LOGS=true
+          VITE_ENABLE_E2E_ENCRYPTION=false
+          EOF
+
+      # ── 7. Build Tauri ───────────────────────────────────────────────────────
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Code signing (Windows) — optional, add to GitHub Secrets
+          # TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+          # TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
+        with:
+          projectPath: meeting-recorder
+          tagName: ${{ github.ref_name }}
+          releaseName: "MeetingAI Enterprise ${{ github.ref_name }}"
+          releaseBody: |
+            ## MeetingAI Enterprise ${{ github.ref_name }}
+            Built by [Devora Devs](http://devoradevs.xyz/)
+
+            ### Installation
+            - **Windows**: Download \`meeting-recorder_${{ github.ref_name }}_x64_en-US.msi\` or the \`setup.exe\`
+            - **macOS**: Download \`meeting-recorder_${{ github.ref_name }}_x64.dmg\`
+            - **Linux**: Download \`meeting-recorder_${{ github.ref_name }}_amd64.AppImage\`
+
+            ### First-time Setup
+            1. Open the app → go to **Settings**
+            2. Enter your **Groq API Key** (free at [console.groq.com](https://console.groq.com))
+            3. Choose your models, and you're ready to record!
+          releaseDraft: false
+          prerelease: false
+          args: --target ${{ matrix.target }}

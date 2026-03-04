@@ -1940,13 +1940,14 @@ checksum = "2532096657941c2fea9c289d370a250971c689d4f143798ff67113ec042024a5"
 
 [[package]]
 name = "meeting-recorder"
-version = "0.1.0"
+version = "1.0.2"
 dependencies = [
  "serde",
  "serde_json",
  "tauri",
  "tauri-build",
  "tauri-plugin-opener",
+ "tauri-plugin-window",
 ]
 
 [[package]]
@@ -3549,6 +3550,17 @@ dependencies = [
  "url",
  "windows",
  "zbus",
+]
+
+[[package]]
+name = "tauri-plugin-window"
+version = "2.0.0-alpha.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "646c4d192ac58631b56059b5a3b26b254b42dcae91a455a818a22687bb841c39"
+dependencies = [
+ "serde",
+ "tauri",
+ "thiserror 1.0.69",
 ]
 
 [[package]]

@@ -19,15 +19,6 @@ jobs:
           - platform: windows-latest
             target: x86_64-pc-windows-msvc
             artifact: .exe
-          - platform: macos-latest
-            target: x86_64-apple-darwin
-            artifact: .dmg
-          - platform: macos-latest
-            target: aarch64-apple-darwin
-            artifact: _aarch64.dmg  # Apple Silicon
-          - platform: ubuntu-22.04
-            target: x86_64-unknown-linux-gnu
-            artifact: .AppImage
 
     runs-on: ${{ matrix.platform }}
     name: Build (${{ matrix.platform }})
@@ -43,7 +34,7 @@ jobs:
         with:
           node-version: "20"
           cache: "npm"
-          cache-dependency-path: meeting-recorder/package-lock.json
+          cache-dependency-path: package-lock.json
 
       # ── 3. Rust ──────────────────────────────────────────────────────────────
       - name: Install Rust stable
@@ -54,28 +45,16 @@ jobs:
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
-          workspaces: "./meeting-recorder/src-tauri -> target"
-
-      # ── 4. Linux system deps ─────────────────────────────────────────────────
-      - name: Install Linux dependencies
-        if: matrix.platform == 'ubuntu-22.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libgtk-3-dev libwebkit2gtk-4.1-dev \
-            libappindicator3-dev librsvg2-dev patchelf \
-            libssl-dev libayatana-appindicator3-dev
+          workspaces: "./src-tauri -> target"
 
       # ── 5. Install npm deps ──────────────────────────────────────────────────
       - name: Install npm dependencies
-        working-directory: meeting-recorder
         run: npm ci
 
       # ── 6. Write .env for build ──────────────────────────────────────────────
       # API keys are passed as GitHub Secrets — never committed to the repo.
       # Users configure their own key in-app (Settings page).
       - name: Create .env for build
-        working-directory: meeting-recorder
         shell: bash
         run: |
           cat > .env << EOF
@@ -101,7 +80,6 @@ jobs:
           # TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           # TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
         with:
-          projectPath: meeting-recorder
           tagName: ${{ github.ref_name }}
           releaseName: "MeetingAI Enterprise ${{ github.ref_name }}"
           releaseBody: |
